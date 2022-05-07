@@ -1,5 +1,6 @@
-mod battery;
+mod batteries;
 mod mem;
+mod module;
 
 use std::convert::TryFrom;
 use std::io;
@@ -10,10 +11,12 @@ use std::time::Duration;
 
 use time::OffsetDateTime;
 
-use self::battery::*;
+use crate::module::Module;
+
+use self::batteries::*;
 use self::mem::*;
 
-fn sleep_until_next_minute_or_event(now: &OffsetDateTime, bat0: Option<&mut Battery>) {
+fn sleep_until_next_minute_or_event(now: &OffsetDateTime, bat0: Option<&mut Batteries>) {
     const MARGIN_SECS: u8 = 1;
     let timeout = Duration::new(
         // Round up to the next minute, adding a small margin to account for
@@ -30,7 +33,7 @@ fn sleep_until_next_minute_or_event(now: &OffsetDateTime, bat0: Option<&mut Batt
         },
     };
     let mut poll_fd = libc::pollfd {
-        fd: bat0.pollable_fd(),
+        fd: bat0.pollable_fd().unwrap(),
         events: libc::EPOLLIN as i16,
         revents: 0,
     };
@@ -40,7 +43,7 @@ fn sleep_until_next_minute_or_event(now: &OffsetDateTime, bat0: Option<&mut Batt
     if ret == -1 {
         eprintln!("poll() failed: {:?}", io::Error::last_os_error());
     } else if ret == 1 {
-        bat0.on_fd_ready();
+        bat0.update();
     }
 }
 
@@ -48,11 +51,11 @@ fn main() {
     // i3 protocol start.
     print!("{{\"version\":1}}\n[");
 
-    let mut bat0 = match Battery::open_bat0() {
+    let mut batteries = match Batteries::new() {
         Ok(val) => Some(val),
         Err(err) => {
             if err.kind() != ErrorKind::NotFound {
-                eprintln!("Failed to read energy_full for BAT0: {:?}", err);
+                eprintln!("Failed to create batteries blocks: {:?}", err);
             }
             None
         }
@@ -82,19 +85,13 @@ fn main() {
             }
         }
 
-        if let Some(ref mut bat0) = bat0 {
+        if let Some(ref mut batteries) = batteries {
             // Print battery state.
-            if let Ok(state) = bat0.read_state() {
-                if state.percentage <= 15 {
-                    print!(
-                        "{{\"full_text\":\"Battery: {}% ({})\",\"color\":\"#ff0000\"}},",
-                        state.percentage, state.status
-                    );
+            for block in batteries.render() {
+                if block.is_warning {
+                    print!("{{\"full_text\":\"{}\",\"color\":\"#ff0000\"}},}}", block.text);
                 } else {
-                    print!(
-                        "{{\"full_text\":\"Battery: {}% ({})\"}},",
-                        state.percentage, state.status
-                    );
+                    print!("{{\"full_text\":\"{}\"}},", block.text);
                 }
             }
         }
@@ -116,6 +113,6 @@ fn main() {
             eprintln!("Failed to flush stdout: {:?}", err);
         }
 
-        sleep_until_next_minute_or_event(&now, bat0.as_mut());
+        sleep_until_next_minute_or_event(&now, batteries.as_mut());
     }
 }
