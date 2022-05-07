@@ -24,7 +24,7 @@
 #include <flibc/util.h>
 
 static uint32_t battery_read_interval = 60;
-static uint32_t timezone = 2;
+static uint32_t timezone = 1;
 
 static void write_time_component(time_t val, char *buf);
 
