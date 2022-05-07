@@ -1,0 +1,10 @@
+---
+Language: Cpp
+UseTab: Always
+TabWidth: 8
+IndentWidth: 8
+BreakBeforeBraces: Linux
+ReflowComments: true
+SortIncludes: true
+IndentPPDirectives: AfterHash
+...

@@ -1,0 +1,8 @@
+# Build files
+*.o
+/gstatus
+
+# Packages
+/archlinux/gstatus-*.tar.zst
+/archlinux/pkg
+/archlinux/src
