@@ -1,4 +1,2 @@
 An i3bar plugin that displays the remaining battery percentage and time.
 
-A PKGBUILD file is available in the archlinux folder to build a package
-for Arch Linux.
