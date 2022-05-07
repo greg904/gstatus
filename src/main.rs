@@ -2,6 +2,7 @@ mod batteries;
 mod clock;
 mod mem;
 mod module;
+mod uevent;
 
 use std::convert::TryFrom;
 use std::convert::TryInto;
