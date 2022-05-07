@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use std::ffi::OsStr;
 use std::io;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::time::Instant;
 
 use crate::module::{Block, Module};
 
@@ -18,15 +19,18 @@ impl TryFrom<&udev::Device> for Battery {
     type Error = MissingOrInvalidProperty;
 
     fn try_from(device: &udev::Device) -> Result<Self, Self::Error> {
-        let energy_full = device.property_value("POWER_SUPPLY_ENERGY_FULL")
+        let energy_full = device
+            .property_value("POWER_SUPPLY_ENERGY_FULL")
             .and_then(OsStr::to_str)
             .and_then(|s| s.parse().ok())
             .ok_or(MissingOrInvalidProperty)?;
-        let energy_now = device.property_value("POWER_SUPPLY_ENERGY_NOW")
+        let energy_now = device
+            .property_value("POWER_SUPPLY_ENERGY_NOW")
             .and_then(OsStr::to_str)
             .and_then(|s| s.parse().ok())
             .ok_or(MissingOrInvalidProperty)?;
-        let status = device.property_value("POWER_SUPPLY_STATUS")
+        let status = device
+            .property_value("POWER_SUPPLY_STATUS")
             .and_then(OsStr::to_str)
             .ok_or(MissingOrInvalidProperty)?;
         Ok(Self {
@@ -48,10 +52,7 @@ impl Batteries {
         let udev_socket = udev::MonitorBuilder::new()?
             .match_subsystem("power_supply")?
             .listen()?;
-        Ok(Batteries {
-            udev_socket,
-            map,
-        })
+        Ok(Batteries { udev_socket, map })
     }
 
     fn scan_batteries() -> io::Result<HashMap<String, Battery>> {
@@ -70,34 +71,31 @@ impl Batteries {
 }
 
 impl Module for Batteries {
-    fn render(&self) -> Vec<Block> {
-        self.map.values()
-            .map(|bat| {
-                let percentage = bat.energy_now * 100 / bat.energy_full;
-                Block {
-                    text: format!("Battery: {}% ({})", percentage, bat.status),
-                    is_warning: percentage <= 15,
-                }
-            })
-            .collect()
+    fn render<'a>(&'a self) -> Box<dyn Iterator<Item = Block> + 'a> {
+        Box::new(self.map.values().map(|bat| {
+            let percentage = bat.energy_now * 100 / bat.energy_full;
+            Block {
+                text: format!("Battery: {}% ({})", percentage, bat.status),
+                is_warning: percentage <= 15,
+            }
+        }))
     }
 
     fn update(&mut self) -> bool {
         let mut dirty = false;
-        while let Some(event) = self.udev_socket.next() {
+        for event in &mut self.udev_socket {
             let device = event.device();
             if let Some(devpath) = device.devpath().to_str() {
-                let action = event.action()
-                    .and_then(|cstr| cstr.to_str());
+                let action = event.action().and_then(|cstr| cstr.to_str());
                 match action {
                     Some("add" | "change") => {
                         if let Ok(info) = Battery::try_from(&device) {
                             self.map.insert(devpath.to_string(), info);
                             dirty = true;
                         }
-                    },
+                    }
                     Some("remove") => dirty |= self.map.remove(devpath).is_some(),
-                    _ => {},
+                    _ => {}
                 }
             }
         }
@@ -108,7 +106,7 @@ impl Module for Batteries {
         Some(self.udev_socket.as_raw_fd())
     }
 
-    fn timeout(&self) -> Option<std::time::Duration> {
+    fn timeout(&self) -> Option<Instant> {
         None
     }
 }

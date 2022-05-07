@@ -1,38 +1,49 @@
 use std::convert::TryInto;
 use std::fs::File;
-use std::io;
 use std::io::{BufRead, BufReader, ErrorKind, Seek, SeekFrom};
+use std::os::unix::io::RawFd;
+use std::time::{Duration, Instant};
+use std::{io, iter};
+
+use crate::module::{Block, Module};
 
 fn parse_u64_with_io_error(s: &str) -> io::Result<u64> {
-    return s
-        .parse()
-        .map_err(|err| io::Error::new(ErrorKind::InvalidData, err));
+    s.parse()
+        .map_err(|err| io::Error::new(ErrorKind::InvalidData, err))
 }
 
-pub(crate) struct Meminfo {
+pub(crate) struct Mem {
     reader: BufReader<File>,
+    timeout: Instant,
+    percentage: u8,
 }
 
-impl Meminfo {
+impl Mem {
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
     pub(crate) fn open() -> io::Result<Self> {
         let file = File::open("/proc/meminfo")?;
-        Ok(Meminfo {
-            reader: BufReader::new(file),
+        let mut reader = BufReader::new(file);
+        let percentage = Mem::read_usage_percentage(&mut reader)?;
+        Ok(Mem {
+            reader,
+            timeout: Instant::now() + Mem::TIMEOUT,
+            percentage,
         })
     }
 
-    pub(crate) fn read_usage_percentage(&mut self) -> io::Result<u8> {
+    fn read_usage_percentage(reader: &mut BufReader<File>) -> io::Result<u8> {
         // If we're reading it again, make sure to seek to the start. Note that
         // this also discards the BufReader's buffer which is important as the
         // data in this file has probably changed since the last read.
-        self.reader.seek(SeekFrom::Start(0))?;
+        reader.seek(SeekFrom::Start(0))?;
 
         let mut mem_avail: Option<u64> = None;
         let mut mem_total: Option<u64> = None;
 
         let mut line = String::new();
         loop {
-            let len = self.reader.read_line(&mut line)?;
+            let len = reader.read_line(&mut line)?;
             if len == 0 {
                 // Handle EOF.
                 return Err(io::Error::new(
@@ -53,8 +64,8 @@ impl Meminfo {
                 .next()
                 .ok_or_else(|| io::Error::new(ErrorKind::InvalidData, "missing value in line"))?;
             match key {
-                "MemAvailable:" => mem_avail = Some(parse_u64_with_io_error(&val)?),
-                "MemTotal:" => mem_total = Some(parse_u64_with_io_error(&val)?),
+                "MemAvailable:" => mem_avail = Some(parse_u64_with_io_error(val)?),
+                "MemTotal:" => mem_total = Some(parse_u64_with_io_error(val)?),
                 _ => {}
             }
             if let Some(mem_avail) = mem_avail {
@@ -67,5 +78,38 @@ impl Meminfo {
 
             line.clear();
         }
+    }
+}
+
+impl Module for Mem {
+    fn render<'a>(&'a self) -> Box<dyn Iterator<Item = Block> + 'a> {
+        let block = Block {
+            text: format!("Mem: {}%", self.percentage),
+            is_warning: self.percentage >= 70,
+        };
+        Box::new(iter::once(block))
+    }
+
+    fn update(&mut self) -> bool {
+        let mut dirty = false;
+        match Mem::read_usage_percentage(&mut self.reader) {
+            Ok(percentage) => {
+                if self.percentage != percentage {
+                    self.percentage = percentage;
+                    dirty = true;
+                }
+            }
+            Err(err) => eprintln!("failed to read memory usage: {:?}", err),
+        }
+        self.timeout = Instant::now() + Mem::TIMEOUT;
+        dirty
+    }
+
+    fn pollable_fd(&self) -> Option<RawFd> {
+        None
+    }
+
+    fn timeout(&self) -> Option<Instant> {
+        Some(self.timeout)
     }
 }
