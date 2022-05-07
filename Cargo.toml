@@ -1,0 +1,19 @@
+[package]
+name = "gstatus"
+version = "0.1.0"
+authors = ["Greg Depoire--Ferrer <greg.depoire@gmail.com>"]
+edition = "2018"
+
+[dependencies.time]
+# Until time fixes retrieval of timezone on Unix platforms, don't update to the
+# newest version.
+version = "=0.2.22"
+# Disable default features to build faster and to build a smaller executable.
+default-features = false
+features = ["std"]
+
+[profile.release]
+# Tweaks to build a smaller executable.
+lto = true
+codegen-units = 1
+panic = "abort"

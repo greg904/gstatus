@@ -2,3 +2,8 @@
 *.o
 *.d
 /gstatus
+
+
+# Added by cargo
+
+/target
