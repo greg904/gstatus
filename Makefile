@@ -8,6 +8,9 @@ CFLAGS = -std=gnu11 -ffreestanding -nostdlib -flto -fPIC -O2 -Wall -Wextra -Werr
 LDLIBS = -lflibc
 LDFLAGS = -static
 
+INSTALL = install
+INSTALL_PROGRAM = $(INSTALL)
+
 .PHONY: all
 all: gstatus
 
@@ -19,6 +22,10 @@ clean:
 format:
 	clang-format -i $(src_c) include/flibc/*.h
 
+###
+# Compilation
+###
+
 %.o: %.c
 	$(CC) $< -c -MD -o $@ -Iflibc/include $(CPPFLAGS) $(CFLAGS)
 
@@ -27,3 +34,11 @@ flibc/libflibc.a:
 
 gstatus: $(objs) flibc/libflibc.a
 	$(CC) $(objs) -o $@ -Lflibc $(CFLAGS) $(LDLIBS) $(LDFLAGS)
+
+###
+# Installation
+###
+
+.PHONY: install
+install: gstatus
+	$(INSTALL_PROGRAM) gstatus $(DESTDIR)/usr/bin/gstatus

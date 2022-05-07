@@ -1,2 +1,5 @@
 An i3bar plugin that displays the remaining battery percentage and time.
 
+To build and install this software, you can use the provided Makefile file.
+Please, read the file to understand what variable you can define and what
+target you can use.
