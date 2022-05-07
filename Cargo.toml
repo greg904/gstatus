@@ -9,12 +9,10 @@ libc = "0.2"
 udev = "^0.6.2"
 
 [dependencies.time]
-# Until time fixes retrieval of timezone on Unix platforms, don't update to the
-# newest version.
-version = "=0.2.22"
+version = "0.3.9"
 # Disable default features to build faster and to build a smaller executable.
 default-features = false
-features = ["std"]
+features = ["local-offset"]
 
 [profile.release]
 # Tweaks to build a smaller executable.

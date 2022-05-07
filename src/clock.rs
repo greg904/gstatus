@@ -25,7 +25,7 @@ impl Clock {
     }
 
     fn read() -> OffsetDateTime {
-        OffsetDateTime::try_now_local().unwrap_or_else(|err| {
+        OffsetDateTime::now_local().unwrap_or_else(|err| {
             eprintln!("failed to retreive local timezone: {:?}", err);
             OffsetDateTime::now_utc()
         })
