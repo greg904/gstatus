@@ -20,18 +20,21 @@
 #include <stdint.h>
 #include <stdnoreturn.h>
 
-#include "sys.h"
-#include "util.h"
+#include <flibc/linux.h>
+#include <flibc/util.h>
 
 static uint32_t battery_read_interval = 60;
 static uint32_t timezone = 2;
 
 static void write_time_component(time_t val, char *buf);
 
-noreturn void my_main()
+int main(int argc, char **argv)
 {
-	if (!FPUTS_A(0, "{\"version\":1}\n["))
-		sys_exit(1);
+	F_UNUSED(argc);
+	F_UNUSED(argv);
+
+	if (!F_PRINT(1, "{\"version\":1}\n["))
+		return 1;
 
 	time_t last_battery_read = 0;
 	uint64_t energy_now = UINT64_MAX;
@@ -40,8 +43,8 @@ noreturn void my_main()
 	for (;;) {
 		struct timespec ts_monotonic;
 		if (sys_clock_gettime(CLOCK_MONOTONIC, &ts_monotonic) != 0) {
-			FPUTS_A(2, "clock_gettime() failed\n");
-			sys_exit(1);
+			F_PRINT(2, "clock_gettime() failed\n");
+			return 1;
 		}
 
 		if (last_battery_read == 0 ||
@@ -62,21 +65,21 @@ noreturn void my_main()
 
 		struct timespec ts_realtime;
 		if (sys_clock_gettime(CLOCK_REALTIME, &ts_realtime) != 0) {
-			FPUTS_A(2, "clock_gettime()\n");
-			sys_exit(1);
+			F_PRINT(2, "clock_gettime()\n");
+			return 1;
 		}
 
-		if (!FPUTS_A(0, "["))
-			sys_exit(1);
+		if (!F_PRINT(1, "["))
+			return 1;
 
 		if (energy_now != UINT64_MAX && energy_full != UINT64_MAX) {
 			char tmp[21];
 			util_write_num(energy_now * 100 / energy_full, tmp, sizeof(tmp) / sizeof(*tmp));
 
-			if (!FPUTS_A(0, "{\"full_text\":\"Battery: ") ||
-				!FPUTS_0(0, tmp) ||
-				!FPUTS_A(0, "%\"},"))
-				sys_exit(1);
+			if (!F_PRINT(1, "{\"full_text\":\"Battery: ") ||
+				!F_PRINT(1, tmp) ||
+				!F_PRINT(1, "%\"},"))
+				return 1;
 		}
 
 		time_t total_minutes = ts_realtime.tv_sec / 60;
@@ -89,12 +92,12 @@ noreturn void my_main()
 		char minutes_buf[3];
 		write_time_component(minutes, minutes_buf);
 
-		if (!FPUTS_A(0, "{\"full_text\":\"") ||
-			!FPUTS_0(0, hours_buf) ||
-			!FPUTS_A(0, ":") ||
-			!FPUTS_0(0, minutes_buf) ||
-			!FPUTS_A(0, "\"}],"))
-			sys_exit(1);
+		if (!F_PRINT(1, "{\"full_text\":\"") ||
+			!F_PRINT(1, hours_buf) ||
+			!F_PRINT(1, ":") ||
+			!F_PRINT(1, minutes_buf) ||
+			!F_PRINT(1, "\"}],"))
+			return 1;
 
 		int sleep_s = INT_MAX;
 
@@ -124,8 +127,8 @@ noreturn void my_main()
 				   sleeping. */
 				continue;
 			} else {
-				FPUTS_A(2, "nanosleep() failed");
-				sys_exit(1);
+				F_PRINT(2, "nanosleep() failed");
+				return 1;
 			}
 		}
 	}
@@ -134,7 +137,7 @@ noreturn void my_main()
 static void write_time_component(time_t val, char *buf)
 {
 	if (val >= 10) {
-		ASSERT(val / 10 < 10);
+		F_ASSERT(val / 10 < 10);
 		buf[0] = '0' + (val / 10);
 		buf[1] = '0' + val % 10;
 	} else {
