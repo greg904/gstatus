@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Greg Depoire--Ferrer <greg.depoire@gmail.com>"]
 edition = "2018"
 
+[dependencies]
+libc = "0.2"
+udev = "^0.6.2"
+
 [dependencies.time]
 # Until time fixes retrieval of timezone on Unix platforms, don't update to the
 # newest version.

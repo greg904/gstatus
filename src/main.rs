@@ -1,6 +1,7 @@
 mod battery;
 mod mem;
 
+use std::convert::TryFrom;
 use std::io;
 use std::io::ErrorKind;
 use std::io::Write;
@@ -12,14 +13,35 @@ use time::OffsetDateTime;
 use self::battery::*;
 use self::mem::*;
 
-fn sleep_until_next_minute(now: &OffsetDateTime) {
+fn sleep_until_next_minute_or_event(now: &OffsetDateTime, bat0: Option<&mut Battery>) {
     const MARGIN_SECS: u8 = 1;
-    thread::sleep(Duration::new(
+    let timeout = Duration::new(
         // Round up to the next minute, adding a small margin to account for
         // error.
         (59 - (now.second() % 60) + MARGIN_SECS).into(),
         1_000_000_000 - (now.nanosecond() % 1_000_000_000),
-    ));
+    );
+
+    let bat0 = match bat0 {
+        Some(val) => val,
+        None => {
+            thread::sleep(timeout);
+            return;
+        },
+    };
+    let mut poll_fd = libc::pollfd {
+        fd: bat0.pollable_fd(),
+        events: libc::EPOLLIN as i16,
+        revents: 0,
+    };
+    let timeout = i32::try_from(timeout.as_millis())
+        .unwrap_or(i32::max_value());
+    let ret = unsafe { libc::poll(&mut poll_fd as *mut libc::pollfd, 1, timeout) };
+    if ret == -1 {
+        eprintln!("poll() failed: {:?}", io::Error::last_os_error());
+    } else if ret == 1 {
+        bat0.on_fd_ready();
+    }
 }
 
 fn main() {
@@ -94,6 +116,6 @@ fn main() {
             eprintln!("Failed to flush stdout: {:?}", err);
         }
 
-        sleep_until_next_minute(&now);
+        sleep_until_next_minute_or_event(&now, bat0.as_mut());
     }
 }
